@@ -34,4 +34,16 @@ export const sendMessage = async (req, res) => {
         console.error(error);
         res.status(500).json({ message: error.message });
     }
+
+
+}
+
+
+export const getMessages = async (req, res) => {
+    try {
+       console.log(req.params)
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: error.message });
+    }
 }
