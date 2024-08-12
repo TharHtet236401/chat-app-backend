@@ -1,12 +1,12 @@
 import Conversation from '../models/conversation.model.js';
 import Message from '../models/message.model.js';
+import {io , userSocketMap} from '../socket/socket.js'
 
 export const sendMessage = async (req, res) => {
     try {
         const { message } = req.body;
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
-
         let conversation = await Conversation.findOne({
             participants: { $all: [senderId, receiverId] }
         });
@@ -28,6 +28,14 @@ export const sendMessage = async (req, res) => {
         }
 
         await Promise.all([conversation.save(), newMessage.save()]);
+
+        const receiverSocketId = userSocketMap.get(receiverId.toString());
+
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit('newMessage', newMessage);
+        }else{
+            console.log("Receiver socket not found");
+        }
 
         res.status(201).json(newMessage);
     } catch (error) {
