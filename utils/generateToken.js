@@ -24,8 +24,8 @@ export const tokenFromSocket = async (socket,next)=>{
     let token = socket.handshake.query.token
     if(token){
         try{
-            user = jwt.verify(token,process.env.SECRET_KEY)
-            socket.data = user.data
+            user = jwt.verify(token,process.env.JWT_SECRET)
+            socket.currentUser = user.data
         }catch(err){
             next(new Error("Handshake Error"))
         }

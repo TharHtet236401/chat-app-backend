@@ -9,6 +9,7 @@ import messageRoutes from './routes/message.routes.js';
 import userRoutes from './routes/user.routes.js';
 
 import {app,io,server} from './socket/socket.js'
+import { tokenFromSocket } from './utils/generateToken.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -20,21 +21,6 @@ app.use(cookieParser())//
 app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/users', userRoutes);
-
-io.of("/chat").use(async (socket,next)=>{
-    console.log("this is within the middleware")
-    const token = socket.handshake
-    console.log(token)
-   next()
-}).on("connection",(socket)=>{
-    console.log("this is within the connection")
-})
-
- 
-io.on("connect_error", (err) => {
-    console.error("Connection Error:", err);
-});
-
 
 
 

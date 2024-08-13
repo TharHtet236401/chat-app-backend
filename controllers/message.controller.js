@@ -1,9 +1,11 @@
+import { Socket } from 'socket.io';
 import Conversation from '../models/conversation.model.js';
 import Message from '../models/message.model.js';
 import {io , userSocketMap} from '../socket/socket.js'
 
 export const sendMessage = async (req, res) => {
     try {
+        console.log(req.body)
         const { message } = req.body;
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
@@ -27,12 +29,16 @@ export const sendMessage = async (req, res) => {
             conversation.messages.push(newMessage._id);
         }
 
+
         await Promise.all([conversation.save(), newMessage.save()]);
 
         const receiverSocketId = userSocketMap.get(receiverId.toString());
 
         if (receiverSocketId) {
-            io.to(receiverSocketId).emit('newMessage', newMessage);
+            console.log(receiverSocketId)
+            console.log("emitted")
+            io.of("/chat").to(receiverSocketId).emit("newMessage", newMessage.message);
+        
         }else{
             console.log("Receiver socket not found");
         }
