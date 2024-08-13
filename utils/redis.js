@@ -28,6 +28,6 @@ export const delObj = async(id)=>{
     try {
         await RedisDB.del(id.toString())
     } catch (error) {
-        console.error("blah blabh redis :", error);//changed the texts
+        console.error("Error deleting object from Redis:", error);
     }
 }
