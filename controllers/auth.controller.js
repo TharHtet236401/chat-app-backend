@@ -1,5 +1,8 @@
 import bcryptjs from 'bcryptjs';
 import User from '../models/user.model.js';
+import { generateTokenAndSetCookie, genToken } from '../utils/generateToken.js';
+
+
 
 
 export const signup = async (req, res) => {
@@ -37,25 +40,49 @@ export const signup = async (req, res) => {
                 fullName:newUser.fullName,
                 username:newUser.username,
                 gender:newUser.gender,
-                profilePic: newUser.profilePic
+                profilePic: newUser.profilePic,
             });
         }else{
             return res.status(400).json({ message: 'User not created' });
         }
 
-       
-        
 
     } catch (error) {
-        console.log("Error in signup",error.message);
-        res.status(500).json({ errorMessage: "Internal Server Error"});
+        
     }
 };
 
-export const login = (req, res) => {
-    res.send('Login route');
+export const login = async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const user = await User.findOne({ username });
+        
+        if (!user) { // Check if user exists first
+            return res.status(400).json({ message: 'Invalid Username or Password' }); // User not found error
+        }
+
+        const isPasswordMatch = await bcryptjs.compare(password, user?.password || ""); 
+        if (!isPasswordMatch) { 
+            return res.status(400).json({ message: 'Invalid Username or Password' }); // Invalid credentials error
+        }
+
+      
+        let userObj = user.toObject();
+        delete userObj.password;
+        userObj.token = genToken(userObj);
+        res.status(200).json(userObj);
+    } catch (error) {
+        console.log("Error in login", error.message); // Corrected error message
+        res.status(500).json({ errorMessage: "Internal Server Error" });
+    }
 };
 
 export const logout = (req, res) => {
-    res.send('Logout route');
+    try{
+        res.cookie('jwt', '', { maxAge: 0 });
+        res.status(200).json({ message: 'Logged out successfully' });
+    }catch(error){
+        console.log("Error in logout", error.message);
+        res.status(500).json({ errorMessage: "Internal Server Error" });
+    }
 };
