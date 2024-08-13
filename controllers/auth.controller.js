@@ -1,6 +1,7 @@
 import bcryptjs from 'bcryptjs';
 import User from '../models/user.model.js';
-import { generateTokenAndSetCookie } from '../utils/generateToken.js';
+import { generateTokenAndSetCookie, genToken } from '../utils/generateToken.js';
+
 
 
 
@@ -34,13 +35,12 @@ export const signup = async (req, res) => {
 
         if (newUser) {
             await newUser.save();
-            generateTokenAndSetCookie(res, newUser._id);
             res.status(201).json({
                 _id :newUser._id,
                 fullName:newUser.fullName,
                 username:newUser.username,
                 gender:newUser.gender,
-                profilePic: newUser.profilePic
+                profilePic: newUser.profilePic,
             });
         }else{
             return res.status(400).json({ message: 'User not created' });
@@ -66,13 +66,11 @@ export const login = async (req, res) => {
             return res.status(400).json({ message: 'Invalid Username or Password' }); // Invalid credentials error
         }
 
-        generateTokenAndSetCookie(res, user._id);
-        res.status(200).json({
-            _id: user._id,
-            fullName: user.fullName,
-            username: user.username,
-            profilePic: user.profilePic
-        });
+      
+        let userObj = user.toObject();
+        delete userObj.password;
+        userObj.token = genToken(userObj);
+        res.status(200).json(userObj);
     } catch (error) {
         console.log("Error in login", error.message); // Corrected error message
         res.status(500).json({ errorMessage: "Internal Server Error" });

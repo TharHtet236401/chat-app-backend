@@ -21,6 +21,19 @@ app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/users', userRoutes);
 
+io.of("/chat").use(async (socket,next)=>{
+    console.log("this is within the middleware")
+    const token = socket.handshake
+    console.log(token)
+   next()
+}).on("connection",(socket)=>{
+    console.log("this is within the connection")
+})
+
+ 
+io.on("connect_error", (err) => {
+    console.error("Connection Error:", err);
+});
 
 
 
