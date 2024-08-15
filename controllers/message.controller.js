@@ -1,14 +1,14 @@
-import { Socket } from 'socket.io';
 import Conversation from '../models/conversation.model.js';
 import Message from '../models/message.model.js';
-import {io , userSocketMap} from '../socket/socket.js'
+import { io } from '../socket/socket.js';
+import { setObj, getObj, delObj } from '../utils/redis.js';
 
 export const sendMessage = async (req, res) => {
     try {
-        console.log(req.body)
         const { message } = req.body;
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
+
         let conversation = await Conversation.findOne({
             participants: { $all: [senderId, receiverId] }
         });
@@ -25,52 +25,125 @@ export const sendMessage = async (req, res) => {
             message: message,
         });
 
-        if (newMessage) {
-            conversation.messages.push(newMessage._id);
-        }
-
-
+        conversation.messages.push(newMessage._id);
+        
         await Promise.all([conversation.save(), newMessage.save()]);
 
-        const receiverSocketId = userSocketMap.get(receiverId.toString());
+        // Get receiver's socket ID from Redis
+        const receiverSocketId = await getObj(`user_socket:${receiverId}`);
 
         if (receiverSocketId) {
-            console.log(receiverSocketId)
-            console.log("emitted")
-            io.of("/chat").to(receiverSocketId).emit("newMessage", newMessage.message);
-        
-        }else{
-            console.log("Receiver socket not found");
+            console.log("Emitting to socket:", receiverSocketId);
+            io.of("/chat").to(receiverSocketId).emit("newMessage", {
+                message: newMessage,
+                conversation: conversation._id
+            });
+        } else {
+            console.log("Receiver not online, storing offline message");
+            const offlineMessages = await getObj(`offline_messages:${receiverId}`) || [];
+            offlineMessages.push({
+                message: newMessage,
+                conversation: conversation._id
+            });
+            await setObj(`offline_messages:${receiverId}`, offlineMessages);
         }
 
         res.status(201).json(newMessage);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: error.message });
+        console.error("Error in sendMessage:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
-
-
-}
-
+};
 
 export const getMessages = async (req, res) => {
     try {
-       const {id : userToChatId} = req.params;
-       const senderId = req.user._id;
+        const { id: userToChatId } = req.params;
+        const senderId = req.user._id;
 
-       let conservation  = await Conversation.findOne({
-        participants : {$all : [userToChatId, senderId]}
-       }).populate("messages");
+        let conversation = await Conversation.findOne({
+            participants: { $all: [userToChatId, senderId] }
+        }).populate("messages");
 
-      if (!conservation) {
-         return res.status(200).json([]);
-      }
-       
+        if (!conversation) {
+            return res.status(200).json([]);
+        }
 
-       res.status(200).json(conservation.messages);
+        // Check for any offline messages
+        const offlineMessages = await getObj(`offline_messages:${senderId}`);
+        if (offlineMessages && offlineMessages.length > 0) {
+            // Add offline messages to the conversation
+            for (let offlineMessage of offlineMessages) {
+                if (offlineMessage.conversation.toString() === conversation._id.toString()) {
+                    conversation.messages.push(offlineMessage.message);
+                }
+            }
+            // Clear offline messages for this conversation
+            await delObj(`offline_messages:${senderId}`);
+        }
 
+        // Sort messages by timestamp
+        conversation.messages.sort((a, b) => a.createdAt - b.createdAt);
+
+        res.status(200).json(conversation.messages);
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: error.message });
+        console.error("Error in getMessages:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
-}
+};
+
+export const deleteMessage = async (req, res) => {
+    try {
+        const { messageId } = req.params;
+        const userId = req.user._id;
+
+        const message = await Message.findById(messageId);
+
+        if (!message) {
+            return res.status(404).json({ message: "Message not found" });
+        }
+
+        if (message.senderId.toString() !== userId.toString()) {
+            return res.status(403).json({ message: "Not authorized to delete this message" });
+        }
+
+        await Message.findByIdAndDelete(messageId);
+
+        // Remove message from conversation
+        await Conversation.updateOne(
+            { messages: messageId },
+            { $pull: { messages: messageId } }
+        );
+
+        res.status(200).json({ message: "Message deleted successfully" });
+    } catch (error) {
+        console.error("Error in deleteMessage:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+export const editMessage = async (req, res) => {
+    try {
+        const { messageId } = req.params;
+        const { newContent } = req.body;
+        const userId = req.user._id;
+
+        const message = await Message.findById(messageId);
+
+        if (!message) {
+            return res.status(404).json({ message: "Message not found" });
+        }
+
+        if (message.senderId.toString() !== userId.toString()) {
+            return res.status(403).json({ message: "Not authorized to edit this message" });
+        }
+
+        message.message = newContent;
+        message.edited = true;
+        await message.save();
+
+        res.status(200).json(message);
+    } catch (error) {
+        console.error("Error in editMessage:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
